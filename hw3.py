@@ -57,65 +57,165 @@ def load_env_file(path: Path = Path(".env")) -> None:
 
 # Choose any 3 of the 15 points, e.g. CHOSEN_POINTS = [1, 7, 15]. Your agent
 # gives a PASS or FAIL verdict on these 3 points only, with your own rule for each.
-CHOSEN_POINTS: list[int] = []  ### YOUR CODE HERE
+CHOSEN_POINTS: list[int] = [4, 7, 11]  
 
 
 def build_agent() -> Any:
-    """Create and return your model or agent once.
+    """Initialize the DeepSeek model for Fisher analysis."""
+    from langchain_deepseek import ChatDeepSeek
 
-    Suggested imports:
-        from langchain_deepseek import ChatDeepSeek
-        from langchain.agents import create_agent
+    model = ChatDeepSeek(
+        model=MODEL_NAME,
+        temperature=0,
+        max_retries=2,
+    )
 
-    Use the DeepSeek model named by ``MODEL_NAME``. The API key is loaded
-    from .env. Each company has its own tools (see ``analyze_companies``), so
-    you will probably create one tool-calling agent per company there.
-    """
-    ### YOUR CODE HERE
-    return None
+    return model
 
 
-async def analyze_companies(agent: Any, companies: dict[str, list[Any]]) -> dict[str, dict[str, Any]]:
-    """Run your agent and return its verdicts on CHOSEN_POINTS for every company.
+def build_agent() -> Any:
+    """Initialize the DeepSeek model for Fisher analysis."""
+    from langchain_deepseek import ChatDeepSeek
 
-    ``companies`` maps each company folder name to its four LangChain tools:
+    model = ChatDeepSeek(
+        model=MODEL_NAME,
+        temperature=0,
+        max_retries=2,
+    )
 
-        list_documents()             names and dates of the company's documents
-        read_document(name)          the text of one document
-        sql_query(query)             one read-only SQLite query on company.db
-        interview(role, topic)       one interview answer (INTERVIEW_LIMIT per company)
-
-    Give the tools to a tool-calling agent, e.g.
-    ``create_agent(model, tools=companies[name], system_prompt=...)``, or call
-    them yourself with ``tool.invoke({...})``. The README explains the
-    documents, the database tables and the interview roles and topics.
-
-    Return one dictionary per company folder name, e.g. with
-    CHOSEN_POINTS = [1, 7, 15]:
-
-        {
-            "hollins_group": {
-                "points": {1: "PASS", 7: "FAIL", 15: "PASS"},
-                "summary": "Two or three sentences explaining the verdicts.",
-            },
-            ...
-        }
-
-    Each chosen point needs a verdict ("PASS" or "FAIL"; True/False also
-    works). Other points are ignored.
-
-    Catch errors per company (e.g. a failed API call) and still return an
-    entry for it: an exception here means no results.csv, which scores zero.
-    You may analyse companies in parallel (e.g. ``asyncio.gather``).
-    """
-    ### YOUR CODE HERE
-    _ = agent
-    return {name: {"points": {}, "summary": ""} for name in companies}
+    return model
 
 
-# Everything below is provided runner/scoring code. No edits are needed.
-# Your code must read company data only through these tools: do not open
-# company.db or interviews.dat directly.
+async def analyze_companies(
+    agent: Any,
+    companies: dict[str, list[Any]]
+) -> dict[str, dict[str, Any]]:
+    """Analyze each company using interviews and DeepSeek."""
+
+    import re
+
+    interview_plan = {
+        4: ("customer", "sales_team"),
+        7: ("current_employee", "working_conditions"),
+        11: ("competitor", "competitive_edge"),
+    }
+
+    rules = {
+        4: (
+            "PASS if the sales team provides valuable advice, "
+            "understands customer needs, and performs better than rivals. "
+            "FAIL if it is ineffective, transactional, or inferior."
+        ),
+        7: (
+            "PASS if employees report positive working conditions, "
+            "trust, fair treatment, and good morale. "
+            "FAIL if there are serious workplace problems."
+        ),
+        11: (
+            "PASS if the company has a meaningful and sustainable "
+            "competitive advantage. FAIL if competitors can easily "
+            "match its products or services."
+        ),
+    }
+
+    semaphore = asyncio.Semaphore(5)
+
+    async def analyze_one(name, tools):
+        async with semaphore:
+            points = {}
+            explanations = []
+
+            try:
+                interview_tool = tools[3]
+
+                for point in CHOSEN_POINTS:
+                    role, topic = interview_plan[point]
+
+                    evidence = await asyncio.to_thread(
+                        interview_tool.invoke,
+                        {
+                            "role": role,
+                            "topic": topic
+                        }
+                    )
+
+                    prompt = f"""
+You are an independent financial analyst applying
+Philip Fisher's stock selection principles.
+
+Company: {name}
+
+Fisher Point {point}:
+{FISHER_POINTS[point]}
+
+Decision rule:
+{rules[point]}
+
+Interview evidence:
+{evidence}
+
+Evaluate the company objectively.
+
+Do not automatically agree with positive claims.
+Base your judgment on the interview evidence.
+
+Respond using exactly this format:
+
+VERDICT: PASS or FAIL
+REASON: One concise sentence explaining why.
+"""
+
+                    response = await agent.ainvoke(prompt)
+                    answer = str(response.content).strip()
+
+                    match = re.search(
+                        r"VERDICT:\s*(PASS|FAIL)",
+                        answer,
+                        re.IGNORECASE
+                    )
+
+                    verdict = (
+                        match.group(1).upper()
+                        if match else "FAIL"
+                    )
+
+                    reason_match = re.search(
+                        r"REASON:\s*(.+)",
+                        answer,
+                        re.IGNORECASE
+                    )
+
+                    reason = (
+                        reason_match.group(1).strip()
+                        if reason_match else answer[:200]
+                    )
+
+                    points[point] = verdict
+
+                    explanations.append(
+                        f"Point {point} ({verdict}): {reason}"
+                    )
+
+                return name, {
+                    "points": points,
+                    "summary": " ".join(explanations)
+                }
+
+            except Exception as exc:
+                return name, {
+                    "points": points,
+                    "summary": f"Analysis error: {exc}"
+                }
+
+    tasks = [
+        analyze_one(name, tools)
+        for name, tools in companies.items()
+    ]
+
+    results = await asyncio.gather(*tasks)
+
+    return dict(results)
+
 
 INTERVIEWS_USED: dict[str, int] = {}
 

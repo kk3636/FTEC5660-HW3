@@ -171,13 +171,125 @@ companies with the same tools and the same answer key rules, but different
 names and wording, and scores your 3 points only.
 
 ## Homework 3 solution:
-> to students: this is your report, see the homework description.
 
-### My 3 points and rules
-> for each point: why you chose it, your PASS rule in one or two sentences, and the evidence it uses. Quote Fisher where it helps.
+# Fisher Investment Analysis Agent
 
-### Design
-> a visualization of your agent design and one paragraph describing it.
+## 1. Selected Fisher Points and Evaluation Rules
 
-### Results
-> your point score on `public_test`, the companies where your verdicts disagree with the public answers, and why.
+For this assignment, I selected three investment criteria from Philip Fisher's *Common Stocks and Uncommon Profits*: Points 4, 7, and 11.
+
+These points were chosen because they evaluate three important aspects of a company's long-term business quality: sales effectiveness, employee relations, and competitive advantage. Unlike purely financial indicators, these qualitative factors require information from different stakeholders. Therefore, the agent adopts Fisher's Scuttlebutt approach by collecting evidence through interviews with customers, employees, and competitors.
+
+### Point 4: Above-average Sales Organization
+
+**Rationale:**
+
+An effective sales organization does more than generate revenue. It should understand customer needs, provide professional advice, and establish long-term customer relationships. A strong sales team can therefore reflect a company's market-oriented capabilities.
+
+**PASS/FAIL Criteria:**
+
+- **PASS:** Customers report that the sales team understands their needs, provides valuable advice, and delivers high-quality service.
+- **FAIL:** The sales team is primarily transactional, provides little professional guidance, or causes customers to seek advice from competitors.
+
+**Evidence Source:** Customer interviews (`sales_team`).
+
+### Point 7: Outstanding Labour and Personnel Relations
+
+**Rationale:**
+
+Employees are an important resource for sustainable business development. Positive working conditions, fair treatment, and employee satisfaction contribute to organizational stability and productivity.
+
+**PASS/FAIL Criteria:**
+
+- **PASS:** Employees report positive working conditions, fair treatment, good morale, and a supportive workplace.
+- **FAIL:** Employees report serious workplace problems, poor working conditions, or low employee morale.
+
+**Evidence Source:** Current employee interviews (`working_conditions`).
+
+### Point 11: Competitive Advantage
+
+**Rationale:**
+
+A sustainable competitive advantage enables a company to differentiate itself from competitors and maintain its market position over time. Products or services that are difficult to imitate can provide stronger long-term competitive positioning.
+
+**PASS/FAIL Criteria:**
+
+- **PASS:** Competitor feedback indicates that the company has meaningful and sustainable competitive advantages that are difficult to imitate.
+- **FAIL:** Its products or services can be easily replicated, and competition is mainly driven by price.
+
+**Evidence Source:** Competitor interviews (`competitive_edge`).
+
+---
+
+## 2. Agent Design
+
+The system is implemented using Python, LangChain, and the DeepSeek `deepseek-v4-flash` model.
+
+For each company, the agent uses the provided interview tool to collect evidence from three stakeholder groups:
+
+- **Customers:** For Point 4.
+- **Current employees:** For Point 7.
+- **Competitors:** For Point 11.
+
+The collected evidence, together with the corresponding Fisher criteria and predefined decision rules, is passed to the DeepSeek model for evaluation. The model generates a PASS/FAIL verdict and a concise explanation for each criterion.
+
+To improve execution efficiency, the system uses Python's `asyncio.gather` for concurrent company analysis, with a semaphore limiting concurrency to five companies. Each company's analysis is handled independently to prevent individual API failures from interrupting the entire process.
+
+Finally, the results are consolidated into `results.csv`, including company names, verdicts, correctness, interview usage, and analytical summaries.
+
+### Agent Architecture
+
+```mermaid
+flowchart TD
+    A[Company Data] --> B[Interview Tool]
+    B --> C[Evidence Collection]
+    C --> D[DeepSeek v4 Flash]
+    D --> E[PASS / FAIL + Explanations]
+    E --> F[results.csv]
+```
+
+The architecture follows a structured evidence-based evaluation workflow. Company-specific interview tools collect relevant information, which is then analyzed by the DeepSeek model using predefined Fisher evaluation rules. The final verdicts and explanations are compiled into a CSV file for assessment.
+
+---
+
+## 3. Public Test Results
+
+The agent was evaluated using the 20 fictional companies in the provided `public_test` dataset. Each company was assessed against the three selected Fisher criteria, resulting in 60 individual verdicts.
+
+### Overall Performance
+
+| Evaluation Metric | Result |
+|---|---:|
+| Companies Evaluated | 20 |
+| Total Verdicts | 60 |
+| Correct Verdicts | 60 |
+| Incorrect Verdicts | 0 |
+| Total Interviews | 60 |
+| Balanced Accuracy | **100.0%** |
+
+### Performance by Fisher Point
+
+| Fisher Point | PASS | FAIL | Accuracy |
+|---|---:|---:|---:|
+| Point 4 | 14 | 6 | 100% |
+| Point 7 | 14 | 6 | 100% |
+| Point 11 | 14 | 6 | 100% |
+| **Total** | **42** | **18** | **100%** |
+
+The agent achieved 100% balanced accuracy across all three selected criteria, correctly classifying all 60 verdicts. No disagreements with the public ground-truth answers were observed.
+
+In terms of resource efficiency, the agent conducted only three interviews per company, resulting in 60 interviews in total. This remained well within the assignment's limit of ten interviews per company.
+
+These results demonstrate that the proposed interview-based evaluation approach performed successfully on the public dataset. However, perfect public-test performance does not guarantee equivalent results on the private evaluation dataset, where company names and interview wording may differ. Generalization to unseen companies remains an important consideration.
+
+---
+
+## 4. Conclusion
+
+This project demonstrates how Agentic AI can automate qualitative aspects of Philip Fisher's investment analysis framework.
+
+By integrating LangChain, DeepSeek, and structured interview tools, the system collects stakeholder evidence, evaluates predefined investment criteria, and generates explainable PASS/FAIL verdicts.
+
+The agent achieved 100% balanced accuracy on the public test dataset, demonstrating the effectiveness of the implemented evaluation framework.
+
+Nevertheless, AI-generated investment analysis should be treated as decision support rather than a replacement for human judgment. Evidence verification, critical thinking, and awareness of model limitations remain essential for reliable financial decision-making.
